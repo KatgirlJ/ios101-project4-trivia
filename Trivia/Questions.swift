@@ -7,7 +7,7 @@
 
 import UIKit
 
-struct QuestionsandAnswers{
+struct QuestionsandAnswers {
     let question: String
     let questionType: String
     let questionSubType: String
@@ -15,15 +15,82 @@ struct QuestionsandAnswers{
 }
 
 class Questions {
+    // Part 2
+    func createURLForTrivia(trivia: String) -> URL? {
+        let urlString: String = "https://opentdb.com/api.php"
+        var urlLink = URLComponents(string: urlString)
+        
+        let queryItem = URLQueryItem(name: "amount", value: "10")
+        urlLink?.queryItems = [queryItem]
+        
+        return urlLink?.url
+    }
     
-    static let questionsAsked: [QuestionsandAnswers] = [
-        QuestionsandAnswers(
-            question: "What planet is closet to the sun?", questionType: "Science", questionSubType: "Astronomy", answers: ["Venus": false, "Mercury": true, "Mars": false, "Earth": false]),
-        QuestionsandAnswers(question: "What does the CPU stand for?", questionType: "Computer Science", questionSubType: "Hardware", answers: ["Central Processing Unit": true, "Computer Personal Unit": false, "Central Program Utility": false, "Core Processing Unit": false]),
-        QuestionsandAnswers(question: "Which language has the most native speakers?", questionType: "World", questionSubType: "Language", answers: ["English": false, "Hindi": false, "Manderian": true, "Spanish": false]),
-        QuestionsandAnswers(question: "What is the world's longest river", questionType: "Geography", questionSubType: "Rivers", answers: ["Amazon": false, "Mississippi": false, "Yangtze": false, "Nile": true]),
-        QuestionsandAnswers(question: "How many stripes are on the US flag?", questionType: "US History", questionSubType: "Flags", answers: ["11": false, "15": false, "13": true, "50": false])
-    ]
+    func connectWithTrivia(trivia: String, completion: @escaping ([Trivia]?) -> Void) {
+        guard let url = createURLForTrivia(trivia: trivia) else {
+            print("URL is nil")
+            completion(nil) // Ensure completion is called if URL fails
+            return
+        }
+        
+        let session = URLSession.shared
+        let task = session.dataTask(with: url) { data, response, error in
+            if error != nil {
+                print("Error fetching data")
+                completion(nil) // Ensure completion is called if network fails
+                return
+            }
+            guard let data = data else {
+                completion(nil)
+                return
+            }
+            
+            if let triviaResult = self.convertDataTrivia(data: data) {
+                // Fixed: Let the ViewController handle thread dispatching, or only call it once here.
+                // We keep it off the background thread context safely.
+                completion(triviaResult.trivia)
+            } else {
+                print("Failed to decode JSON data")
+                completion(nil)
+            }
+        }
+        task.resume()
+    }
     
-}
+    func convertDataTrivia(data: Data) -> TriviaResult? {
+        let jsonDecoder = JSONDecoder()
+        let result = try? jsonDecoder.decode(TriviaResult.self, from: data)
+        return result
+    }
 
+    struct Trivia: Codable {
+        enum Difficulties: String, Codable {
+            case easy = "easy"
+            case medium = "medium"
+            case hard = "hard"
+        }
+        let type: String
+        let difficulty: Difficulties
+        let category: String
+        let question: String
+        let correctAnswer: String
+        let wrongAnswers: [String]
+        
+        enum CodingKeys: String, CodingKey {
+            case type = "type"
+            case difficulty = "difficulty"
+            case category = "category"
+            case question = "question"
+            case correctAnswer = "correct_answer"
+            case wrongAnswers = "incorrect_answers"
+        }
+    }
+    
+    struct TriviaResult: Codable {
+        let trivia: [Trivia]?
+        
+        enum CodingKeys: String, CodingKey {
+            case trivia = "results"
+        }
+    }
+}
